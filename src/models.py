@@ -5,12 +5,12 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
-from enum import Enum
+from enum import StrEnum
 
 TWO_PLACES = Decimal("0.01")
 
 
-class TransactionStatus(str, Enum):
+class TransactionStatus(StrEnum):
     COMPLETED = "COMPLETED"
     REJECTED_INSUFFICIENT_FUNDS = "REJECTED_INSUFFICIENT_FUNDS"
     REJECTED_INVALID = "REJECTED_INVALID"
@@ -44,18 +44,14 @@ class CampaignRule:
             return False
         if self.start_datetime is not None and moment < self.start_datetime:
             return False
-        if self.end_datetime is not None and moment > self.end_datetime:
-            return False
-        return True
+        return not (self.end_datetime is not None and moment > self.end_datetime)
 
     def applies_to(self, purchase_amount: Decimal, moment: dt.datetime) -> bool:
         if not self.is_active_at(moment):
             return False
         if purchase_amount < self.min_purchase_amount:
             return False
-        if self.total_budget is not None and (self.remaining_budget or Decimal("0")) <= 0:
-            return False
-        return True
+        return not (self.total_budget is not None and (self.remaining_budget or Decimal("0")) <= 0)
 
     def compute_cashback(self, purchase_amount: Decimal) -> Decimal:
         cashback = purchase_amount * self.cashback_rate

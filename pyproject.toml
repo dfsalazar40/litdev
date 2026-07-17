@@ -1,0 +1,25 @@
+[tool.ruff]
+line-length = 110
+src = ["src", "tests"]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["models", "errors", "validation", "campaign_service", "purchase_service", "lambda_function", "logging_utils"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+files = ["src"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = "moto.*"
+ignore_missing_imports = true

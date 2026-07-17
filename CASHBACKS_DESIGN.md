@@ -213,15 +213,22 @@ Pirámide:
 
 ## 7. Plan de acción (orden de implementación)
 
-1. `models.py` + `errors.py` — tipos y contratos, sin dependencias externas (testeable de inmediato).
-2. `validation.py` — parseo del evento nuevo, unit tests de validación.
-3. `campaign_service.py` — resolución de campaña, unit tests puros (sin AWS) con listas de campañas fabricadas.
-4. `purchase_service.py` — orquestación con `transact_write_items`, tests con `moto`.
-5. `lambda_function.py` — handler delgado que conecta todo (parsea mensajes SQS, reporta batch item failures), tests de integración end-to-end con `moto`.
-6. Test de concurrencia (threads) sobre el flujo completo.
-7. Script/migración de seed: insertar la campaña `GLOBAL` base (`min_purchase_amount=100`, `rate=0.05`, `priority=0`, sin `total_budget`) para no perder el comportamiento actual el día del corte.
+Estado: **implementado** en `src/` y `tests/` (49 tests, `ruff` y `mypy` limpios). Lo que sigue es el plan original, ya ejecutado en este orden:
 
-Con la ventana de idempotencia confirmada en 30 minutos (§3), no quedan puntos abiertos. Puedo arrancar la implementación en el orden de arriba.
+1. `models.py` + `errors.py` — tipos y contratos, sin dependencias externas (testeable de inmediato). ✅
+2. `validation.py` — parseo del evento nuevo, unit tests de validación. ✅
+3. `campaign_service.py` — resolución de campaña, unit tests puros (sin AWS) con listas de campañas fabricadas. ✅
+4. `purchase_service.py` — orquestación con `transact_write_items`, tests con `moto`. ✅
+5. `lambda_function.py` — handler delgado que conecta todo (parsea mensajes SQS, reporta batch item failures), tests de integración end-to-end con `moto`. ✅
+6. Test de concurrencia (threads) sobre el flujo completo. ✅
+7. Script/migración de seed: insertar la campaña `GLOBAL` base (`min_purchase_amount=100`, `rate=0.05`, `priority=0`, sin `total_budget`) para no perder el comportamiento actual el día del corte. ✅ (`scripts/seed_campaigns.py`)
+
+Hardening agregado después de la implementación inicial, no estaba en el plan original:
+
+8. **Logging estructurado** (`src/logging_utils.py`): reemplaza el handler de texto plano que el runtime de Lambda deja instalado por uno que emite cada línea como JSON (nivel, logger, mensaje, y los campos de `extra={...}` como `idempotency_key`, `status`, `applied_campaign_id`), para poder filtrar/consultar en CloudWatch Logs Insights. Cierra el hueco entre lo que el diagrama de §8 ya prometía (`CloudWatch Logs`) y lo que el código realmente hacía (`logging` plano sin formato).
+9. **Lint y type-check** (`ruff` + `mypy`, config en `pyproject.toml`): al correr `mypy` con `boto3-stubs[dynamodb]` instalado, salió a la luz un bug real en `validation.py` — `Decimal("NaN")` y `Decimal("Infinity")` parseaban sin error como `purchase_amount` válido y luego crasheaban más adelante (una excepción sin capturar en la comparación de `NaN`, un `TypeError` al negar el exponente de `Infinity`), lo cual habría causado reintentos infinitos vía SQS para un input que nunca iba a procesarse. Ya está corregido: ambos se rechazan explícitamente con `InvalidInputError`.
+
+No quedan puntos abiertos de diseño.
 
 ## 8. Diagrama de infraestructura
 
@@ -268,5 +275,5 @@ Notas sobre el diagrama:
 - **La Lambda no es la acción principal.** El nodo marcado en marrón (`Core`) es donde realmente se decide y autoriza la compra (red de tarjeta / core banking), en tiempo real. `process_purchase` se dispara **después**, como reacción asíncrona al evento ya consumado, para reconciliar el ledger interno (balance + cashback). Por eso el trigger es una cola (SQS), no un API Gateway esperando una respuesta.
 - **Con DLQ**, a diferencia de la versión anterior de este diagrama: ahora que la invocación es asíncrona vía SQS, un fallo transitorio (throttling, bug momentáneo) se reintenta automáticamente vía redrive policy, y tras agotar `maxReceiveCount` el mensaje se mueve a la DLQ para investigación y alerta, en vez de perderse.
 - **"Fondos insuficientes" no se reintenta en la DLQ como si fuera transitorio**: como se explica en §5, es una excepción de reconciliación (la compra ya fue aprobada en otro sistema), así que la Lambda la reporta como fallo no recuperable y la deja auditada en `transactions`, no la deja rebotando hasta la DLQ.
-- **X-Ray y CloudWatch Alarms** están para cerrar el gap de observabilidad que señalé en la Parte 1 (el `print()` original no daba ninguna visibilidad real). La alarma de `ConditionalCheckFailed` no es "no debería fallar nunca" — fallos ocasionales por contención de campaña o balance son esperados y correctos; la alarma es para detectar una tasa anormalmente alta, que sí sería señal de un bug o de un ataque.
+- **CloudWatch Logs ya está implementado** vía `src/logging_utils.py` (logging estructurado en JSON, ver §7 punto 8) — no es solo una caja en el diagrama. **X-Ray y CloudWatch Alarms** siguen siendo trabajo pendiente de infraestructura (no hay código de instrumentación de X-Ray ni alarmas definidas todavía) para cerrar del todo el gap de observabilidad que señalé en la Parte 1 (el `print()` original no daba ninguna visibilidad real). La alarma de `ConditionalCheckFailed` no es "no debería fallar nunca" — fallos ocasionales por contención de campaña o balance son esperados y correctos; la alarma es para detectar una tasa anormalmente alta, que sí sería señal de un bug o de un ataque.
 - **IAM Role** con permisos mínimos por tabla (no `dynamodb:*`): la Lambda nunca debería tener permiso de `DeleteItem` en ninguna tabla, por ejemplo.

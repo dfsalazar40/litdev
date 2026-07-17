@@ -12,7 +12,7 @@ from errors import DuplicateRequestConflictError, InsufficientFundsError, UserNo
 from models import PurchaseRequest, TransactionStatus
 from purchase_service import ProcessPurchase
 
-NOW = dt.datetime(2026, 7, 17, 12, 0, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 7, 17, 12, 0, tzinfo=dt.UTC)
 
 
 def make_request(**overrides) -> PurchaseRequest:

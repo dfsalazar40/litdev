@@ -41,10 +41,18 @@ def parse_purchase_event(raw: dict) -> PurchaseRequest:
             "purchase_amount is not a valid decimal number", field="purchase_amount"
         ) from exc
 
+    # Decimal("NaN") and Decimal("Infinity") both parse successfully above (no
+    # InvalidOperation) - NaN then raises InvalidOperation on the comparison below
+    # instead, and Infinity would sail through it. Both must be rejected explicitly.
+    if not purchase_amount.is_finite():
+        raise InvalidInputError("purchase_amount must be a finite number", field="purchase_amount")
+
     if purchase_amount <= 0:
         raise InvalidInputError("purchase_amount must be greater than zero", field="purchase_amount")
 
-    if -purchase_amount.as_tuple().exponent > 2:
+    exponent = purchase_amount.as_tuple().exponent
+    assert isinstance(exponent, int)  # guaranteed by is_finite() above
+    if -exponent > 2:
         raise InvalidInputError(
             "purchase_amount cannot have more than 2 decimal places", field="purchase_amount"
         )

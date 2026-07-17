@@ -12,6 +12,8 @@ import datetime as dt
 from decimal import Decimal
 from typing import Any
 
+from mypy_boto3_dynamodb.service_resource import Table
+
 from models import CampaignRule
 
 GLOBAL_MERCHANT_ID = "GLOBAL"
@@ -43,7 +45,7 @@ def item_to_rule(item: dict[str, Any]) -> CampaignRule:
     )
 
 
-def fetch_candidates(campaigns_table, merchant_id: str) -> list[CampaignRule]:
+def fetch_candidates(campaigns_table: Table, merchant_id: str) -> list[CampaignRule]:
     """Query campaigns scoped to this merchant plus the GLOBAL bucket via the GSI."""
     items: list[dict[str, Any]] = []
     merchant_keys = {merchant_id, GLOBAL_MERCHANT_ID}

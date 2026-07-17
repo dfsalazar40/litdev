@@ -15,6 +15,7 @@ src/
   validation.py           # parseo/validación del evento de compra
   models.py               # tipos de datos (CampaignRule, PurchaseRequest, PurchaseResult)
   errors.py                # excepciones de dominio
+  logging_utils.py        # logging estructurado (JSON) para CloudWatch Logs
 scripts/
   seed_campaigns.py       # migra la regla legacy (>100 -> 5%) a la campaña GLOBAL
 tests/                     # unit puros, integración con moto, concurrencia con threads
@@ -30,8 +31,9 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
 
-`requirements-dev.txt` incluye `requirements.txt` (boto3) más `pytest` y
-`moto[dynamodb]`, necesarios solo para desarrollo/tests.
+`requirements-dev.txt` incluye `requirements.txt` (boto3) más `pytest`,
+`moto[dynamodb]`, `ruff`, `mypy` y `boto3-stubs[dynamodb]` (stubs de tipos para
+las llamadas a DynamoDB), necesarios solo para desarrollo/tests.
 
 ## Correr los tests
 
@@ -52,6 +54,23 @@ pytest tests/test_models.py tests/test_validation.py tests/test_campaign_service
 pytest tests/test_purchase_service.py tests/test_lambda_handler.py                    # integración (moto)
 pytest tests/test_concurrency.py                                                       # concurrencia (threads reales)
 ```
+
+## Lint y type-check
+
+```bash
+source .venv/bin/activate
+ruff check .     # lint (incluye orden de imports y reglas de simplificación)
+mypy              # type-check de src/ (config en pyproject.toml)
+```
+
+## Logging estructurado
+
+`lambda_function.py` llama a `logging_utils.configure_logging()` al importarse:
+reemplaza el handler de texto plano que el runtime de Lambda deja instalado por
+uno que emite cada línea como un objeto JSON (nivel, logger, mensaje, y
+cualquier campo pasado vía `extra={...}`), para poder filtrar/consultar en
+CloudWatch Logs Insights por `idempotency_key`, `status`, `applied_campaign_id`,
+etc.
 
 ## Variables de entorno (Lambda desplegada)
 

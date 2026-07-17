@@ -6,7 +6,7 @@ from decimal import Decimal
 from campaign_service import rank_candidates
 from models import CampaignRule
 
-NOW = dt.datetime(2026, 7, 17, 12, 0, tzinfo=dt.timezone.utc)
+NOW = dt.datetime(2026, 7, 17, 12, 0, tzinfo=dt.UTC)
 
 
 def make_rule(campaign_id, priority, remaining_budget=None, total_budget=None, **overrides):

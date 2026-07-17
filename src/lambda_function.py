@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 import boto3
 
@@ -24,10 +25,11 @@ from errors import (
     InvalidInputError,
     UserNotFoundError,
 )
+from logging_utils import configure_logging
 from purchase_service import ProcessPurchase
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+configure_logging()
+logger = logging.getLogger(__name__)
 
 _NON_RETRYABLE_EXCEPTIONS = (
     InvalidInputError,
@@ -58,7 +60,7 @@ def _processor_instance() -> ProcessPurchase:
     return _processor
 
 
-def lambda_handler(event, context):
+def lambda_handler(event: dict[str, Any], context: object) -> dict[str, Any]:
     batch_item_failures = []
 
     for record in event.get("Records", []):
@@ -72,17 +74,29 @@ def lambda_handler(event, context):
             result = _processor_instance().handle(request)
             logger.info(
                 "purchase processed",
-                extra={"idempotency_key": result.idempotency_key, "status": result.status.value},
+                extra={
+                    "message_id": message_id,
+                    "idempotency_key": result.idempotency_key,
+                    "user_id": result.user_id,
+                    "status": result.status.value,
+                    "applied_campaign_id": result.applied_campaign_id,
+                    "cashback_earned": result.cashback_earned,
+                },
             )
         except _NON_RETRYABLE_EXCEPTIONS as exc:
             logger.warning(
-                "purchase rejected: %s: %s",
-                type(exc).__name__,
-                exc,
-                extra={"message_id": message_id},
+                "purchase rejected",
+                extra={
+                    "message_id": message_id,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                },
             )
         except Exception:
-            logger.exception("unexpected error processing purchase", extra={"message_id": message_id})
+            logger.exception(
+                "unexpected error processing purchase",
+                extra={"message_id": message_id},
+            )
             batch_item_failures.append({"itemIdentifier": message_id})
 
     return {"batchItemFailures": batch_item_failures}

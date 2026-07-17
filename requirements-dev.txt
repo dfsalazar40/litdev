@@ -1,3 +1,6 @@
 -r requirements.txt
 pytest>=8.0
 moto[dynamodb]>=5.0
+ruff>=0.6
+mypy>=1.11
+boto3-stubs[dynamodb]>=1.34

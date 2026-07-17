@@ -23,10 +23,13 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+from collections.abc import Callable
 from decimal import Decimal
 from typing import Any
 
 from botocore.exceptions import ClientError
+from mypy_boto3_dynamodb.service_resource import Table
+from mypy_boto3_dynamodb.type_defs import TransactWriteItemTypeDef
 
 import campaign_service
 from errors import DuplicateRequestConflictError, InsufficientFundsError, UserNotFoundError
@@ -50,7 +53,7 @@ class _DuplicateReplay(Exception):
 
 
 def _utcnow() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
+    return dt.datetime.now(dt.UTC)
 
 
 def _same_request(existing_item: dict[str, Any], request: PurchaseRequest) -> bool:
@@ -75,7 +78,13 @@ def _result_from_item(item: dict[str, Any]) -> PurchaseResult:
 
 
 class ProcessPurchase:
-    def __init__(self, users_table, campaigns_table, transactions_table, clock=_utcnow):
+    def __init__(
+        self,
+        users_table: Table,
+        campaigns_table: Table,
+        transactions_table: Table,
+        clock: Callable[[], dt.datetime] = _utcnow,
+    ) -> None:
         self.users_table = users_table
         self.campaigns_table = campaigns_table
         self.transactions_table = transactions_table
@@ -114,7 +123,7 @@ class ProcessPurchase:
         cashback_earned = campaign.compute_cashback(request.purchase_amount) if campaign else Decimal("0.00")
 
         now = self._clock()
-        transact_items: list[dict[str, Any]] = [
+        transact_items: list[TransactWriteItemTypeDef] = [
             {
                 "Update": {
                     "TableName": self.users_table.table_name,
@@ -194,7 +203,7 @@ class ProcessPurchase:
         self,
         exc: ClientError,
         request: PurchaseRequest,
-        transact_items: list[dict[str, Any]],
+        transact_items: list[TransactWriteItemTypeDef],
         transactions_index: int,
     ) -> None:
         reasons = exc.response["CancellationReasons"]
